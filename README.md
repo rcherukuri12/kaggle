@@ -1,1 +1,1 @@
-# kaggle
+# kaggle competition learning examples
