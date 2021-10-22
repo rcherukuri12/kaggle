@@ -31,6 +31,9 @@ def do_one_hot(tdata,cols):
 cols = ['Pclass','Sex','Embarked']
 train_data = do_one_hot(train_data,cols)
 test_data = do_one_hot(test_data,cols)
+# drop all males 
+train_data = train_data.drop("male",axis=1)
+test_data = test_data.drop("male",axis=1)
 
 # let us switch ['Pclass','Sex','Embarked'] to category encoding.
 #from category_encoders import OrdinalEncoder 
