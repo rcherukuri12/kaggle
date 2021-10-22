@@ -1,4 +1,6 @@
 # titanic_predictor.py
+# this is a fun example...to see how much info. we can still retain 
+# if we binarize all features.
 
 import numpy as np
 import pandas as pd
