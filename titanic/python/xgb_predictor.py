@@ -67,6 +67,7 @@ cols4 = ['Parch']
 train_data = do_one_hot(train_data,cols4)
 test_data = do_one_hot(test_data,cols4)
 
+
 # # binarize cabin data as well
 # train_data['Cabin'] = train_data['Cabin'].apply(lambda k: str(k)[0])
 # test_data['Cabin'] = test_data['Cabin'].apply(lambda k: str(k)[0])
@@ -85,7 +86,7 @@ Xtrain = train_data.values
 Xtrain = np.delete(Xtrain,1,axis=1) # drop the 'Survived' data
 Xtrain = np.delete(Xtrain,0,axis=1) # drop the 'PassengerId' data
 Ytrain = train_data['Survived'].values
-Ytrain = pd.get_dummies(Ytrain).astype('float32').values 
+#Ytrain = pd.get_dummies(Ytrain).astype('float32').values 
 
 
 # for test data separate out 'PassengerId' so that you can use later.
@@ -93,36 +94,50 @@ Xtest_ids = test_data['PassengerId'].values
 Xtest_org  = test_data.values
 
 Xtest = np.delete(Xtest_org,0,axis=1) # drop the 'PassengerId' data
-#Xtest = test_data.values
 
 # Now everything is ready ....
-from tensorflow import keras
-from tensorflow.keras import layers , callbacks
-model = keras.Sequential([
-    layers.Dense(Xtrain.shape[1], activation="relu"),
-    layers.Dense(np.math.floor(Xtrain.shape[1]), activation="relu"),
-    layers.Dropout(0.2),
-    layers.Dense(np.math.floor(Xtrain.shape[1]), activation="relu"),
-    layers.Dense(np.math.floor(Xtrain.shape[1]), activation="relu"),
-    #layers.Dense(np.math.floor(Xtrain.shape[1]/8), activation="relu"),
-    #layers.Dense(np.math.floor(Xtrain.shape[1]/10), activation="relu"),
-    layers.Dense(2, activation="softmax")
-    ])
+import xgboost as xgb
+from scipy.sparse import csr_matrix
+X_train_csr = csr_matrix(Xtrain)
+X_test_csr = csr_matrix(Xtest)
+dtrain = xgb.DMatrix(X_train_csr, label = Ytrain ,missing = 0.0)#,feature_names=fm)  
+dtest  = xgb.DMatrix(X_test_csr,missing = 0.0)#,feature_names=fm)  
 
-model.compile(optimizer="adam",
-              loss="categorical_crossentropy",
-              metrics=["accuracy"])
-log_dir = "/tmp/logs"
-tensorboard_callback = keras.callbacks.TensorBoard(log_dir=log_dir, histogram_freq=1)
-callback = keras.callbacks.EarlyStopping(monitor='accuracy', patience=3)
-model.fit(Xtrain, Ytrain, epochs=1000, batch_size=16,callbacks=[callback,tensorboard_callback])
-#model.fit(Xtrain, Ytrain, epochs=5000, batch_size=32)
+num_round = 300
+base_score = 0.5
+param = {'objective':'binary:logistic'}
+param['max_depth'] = 9
+param['eval_metric'] = ['auc']
+param['booster']='dart'
+param['subsample']=0.5
+param['colsample_bytree']=0.4
+param['eta']=0.1 # learning rate
+param['lambda'] = 0.001 # L2
+param['base_score']= base_score
 
-predictions = model.predict(Xtest)
-# convert predictions into 
-y_score = np.argmax(predictions,axis=1)
+print('running cv to get max rounds')
+# do cross validation, this will print result out a
+# [iteration]  metric_name:mean_value+std_valu
+# std_value is standard deviation of the metric
+res = xgb.cv(param,dtrain, num_round, nfold=10,early_stopping_rounds=3,
+        metrics={'auc'},seed=0,
+        callbacks=[xgb.callback.print_evaluation(show_stdv=True)])
 
-output = np.column_stack((Xtest_org[:,0],y_score))
+num_round = res.shape[0]
+#plot_curve(dir_name + "/cv-result.png","stump test",res['train-auc-mean'],res['test-auc-mean'])
+watchlist = [(dtrain, 'train')]
+bst = xgb.train(param, dtrain, num_round, watchlist)
+
+#callback = keras.callbacks.EarlyStopping(monitor='accuracy', patience=3)
+#model.fit(Xtrain, Ytrain, epochs=1000, batch_size=16,callbacks=[callback,tensorboard_callback])
+##model.fit(Xtrain, Ytrain, epochs=5000, batch_size=32)
+#
+predictions = bst.predict(dtest)
+## convert predictions into 
+#y_score = np.argmax(predictions,axis=1)
+nm = np.where(predictions > param['base_score'], 1, 0)
+#
+output = np.column_stack((Xtest_org[:,0],nm))
 df_results = pd.DataFrame(output.astype('int'),columns=['PassengerID','Survived'])
 df_results.to_csv('~/results/titanic_results.csv',index=False)
-model.summary()
+##model.summary()
