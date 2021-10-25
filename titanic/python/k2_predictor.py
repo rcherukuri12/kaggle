@@ -98,17 +98,24 @@ Xtest = np.delete(Xtest_org,0,axis=1) # drop the 'PassengerId' data
 # Now everything is ready ....
 from tensorflow import keras
 from tensorflow.keras import layers , callbacks
-model = keras.Sequential([
-    layers.Dense(Xtrain.shape[1], activation="relu", name= 'l1'),
-    layers.Dense(np.math.floor(Xtrain.shape[1]), activation="relu", name ='l2'),
-    #layers.Dropout(0.5),
-    layers.Dense(np.math.floor(Xtrain.shape[1]/2), activation="relu", name='l3'),
-    layers.Dense(np.math.floor(Xtrain.shape[1]/3), activation="relu", name='l4'),
-    #layers.Dense(np.math.floor(Xtrain.shape[1]/6), activation="relu"),
-    #layers.Dense(np.math.floor(Xtrain.shape[1]/10), activation="relu"),
-    layers.Dense(2, activation="softmax")
-    ])
+p = 0.1
+inputs = keras.layers.Input((Xtrain.shape[1],), name='functional_batchnorms')
+x = keras.layers.Dropout(p)(inputs)
+x = keras.layers.Dense(Xtrain.shape[1]*2, activation='relu')(x)
 
+x = keras.layers.BatchNormalization()(x)
+x = keras.layers.Dropout(p)(x)
+x = keras.layers.Dense(Xtrain.shape[1], activation='relu')(x)
+
+x = keras.layers.BatchNormalization()(x)
+x = keras.layers.Dropout(p)(x)
+x = keras.layers.Dense(Xtrain.shape[1]/4, activation='relu')(x)
+
+x = keras.layers.BatchNormalization()(x)
+x = keras.layers.Dropout(p)(x)
+out = keras.layers.Dense(2, activation='softmax', name='output')(x)
+
+model = keras.models.Model(inputs=inputs, outputs=out)
 model.compile(optimizer="adam",
               loss="categorical_crossentropy",
               metrics=["accuracy"])
